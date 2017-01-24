@@ -1,0 +1,32 @@
+{
+  "name": "react-native-kurento-utils",
+  "version": "0.0.1",
+  "description": "Kurento Utils for React Native",
+  "main": "index.js",
+  "dependencies": {
+    "eslint-config-airbnb": "^14.0.0",
+    "eslint": "^3.14.0",
+    "eslint-plugin-import": "^2.2.0",
+    "eslint-plugin-jsx-a11y": "^3.0.2",
+    "eslint-plugin-react": "^6.9.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/orchidstream/react-native-kurento-utils.git"
+  },
+  "keywords": [
+    "Kurento",
+    "Kurento React Native Utils",
+    "WebRTC"
+  ],
+  "author": "Nikita Chebykin",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/orchidstream/react-native-kurento-utils/issues"
+  },
+  "homepage": "https://github.com/orchidstream/react-native-kurento-utils#readme"
+}
