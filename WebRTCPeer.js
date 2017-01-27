@@ -306,9 +306,6 @@ class WebRTCPeer extends EventEmitter {
   generateOffer(callback) {
     callback = callback.bind(this);
 
-    let offerAudio = true;
-    let offerVideo = true;
-
     // Constraints must have both blocks
     if (this._mediaConstraints) {
       offerAudio = (typeof this._mediaConstraints.audio === 'boolean') ?
@@ -380,7 +377,7 @@ class WebRTCPeer extends EventEmitter {
    *            Invoked after the SDP answer is processed, or there is an error.
    */
   processAnswer(sdpAnswer, callback) {
-    callback = (callback || noop).bind(this);
+    const cb = (callback || noop).bind(this);
 
     const answer = new RTCSessionDescription({
       type: 'answer',
@@ -390,15 +387,14 @@ class WebRTCPeer extends EventEmitter {
     logger.info('SDP answer received, setting remote description');
 
     if (this._peerConnection.signalingState === 'closed') {
-      return callback('PeerConnection is closed');
+      return cb('PeerConnection is closed');
     }
 
     this._peerConnection.setRemoteDescription(answer, () => {
-      setRemoteVideo();
+      this.setRemoteVideo();
 
-      callback();
-    },
-      callback);
+      cb();
+    }, cb);
   }
 
   /**
@@ -429,9 +425,9 @@ class WebRTCPeer extends EventEmitter {
       .then(() => this.setRemoteVideo())
       .then(() => this._peerConnection.createAnswer())
       .then((answer) => {
-        answer = this.mangleSdpToAddSimulcast(answer);
+        const ans = this.mangleSdpToAddSimulcast(answer);
         logger.info('Created SDP answer');
-        return this._peerConnection.setLocalDescription(answer);
+        return this._peerConnection.setLocalDescription(ans);
       }).then(() => {
         const localDescription = this._peerConnection.localDescription;
         logger.info('Local description set', localDescription.sdp);
@@ -440,6 +436,7 @@ class WebRTCPeer extends EventEmitter {
   }
 
   mangleSdpToAddSimulcast(answer) {
+    // TODO: remove browser stuff
     if (this.simulcast) {
       if (browser.name === 'Chrome' || browser.name === 'Chromium') {
         logger.info('Adding multicast info');
@@ -474,11 +471,11 @@ class WebRTCPeer extends EventEmitter {
     }
 
     if (this._videoStream) {
-      this._peerConnection.addStream(videoStream);
+      this._peerConnection.addStream(this._videoStream);
     }
 
     if (this._audioStream) {
-      this._peerConnection.addStream(audioStream);
+      this._peerConnection.addStream(this._audioStream);
     }
 
     // TODO: return promise
