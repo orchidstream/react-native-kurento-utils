@@ -1,21 +1,22 @@
-'use strict';
-
-import {recursive} from 'merge';
+import merge from 'merge';
 import freeice from 'freeice';
 import EventEmitter from 'events';
+import uuid from 'uuid';
 import {
   RTCPeerConnection,
   RTCIceCandidate,
-  RTCSessionDescription
+  RTCSessionDescription,
 } from 'react-native-webrtc';
 
 const MEDIA_CONSTRAINTS = {
   audio: true,
   video: {
     width: 640,
-    framerate: 15
-  }
+    framerate: 15,
+  },
 };
+
+const logger = console;
 
 // Somehow, the UAParser constructor gets an empty window object.
 // We need to pass the user agent string in order to get information
@@ -24,15 +25,17 @@ const MEDIA_CONSTRAINTS = {
 // var browser = parser.getBrowser()
 
 function noop(error) {
-  if (error) logger.error(error)
+  if (error) logger.error(error);
 }
 
 function trackStop(track) {
-  track.stop && track.stop()
+  if ('stop' in track) {
+    track.stop();
+  }
 }
 
 function streamStop(stream) {
-  stream.getTracks().forEach(trackStop)
+  stream.getTracks().forEach(trackStop);
 }
 
 /**
@@ -40,21 +43,21 @@ function streamStop(stream) {
  */
 function dumpSDP(description) {
   if (typeof description === 'undefined' || description === null) {
-    return ''
+    return '';
   }
 
-  return 'type: ' + description.type + '\r\n' + description.sdp
+  return `type: ${description.type}\r\n${description.sdp}`;
 }
 
 function bufferizeCandidates(pc, onerror) {
-  let candidatesQueue = [];
+  const candidatesQueue = [];
 
   pc.addEventListener('signalingstatechange', function () {
     if (this.signalingState === 'stable') {
       while (candidatesQueue.length) {
-        let entry = candidatesQueue.shift();
+        const entry = candidatesQueue.shift();
 
-        this.addIceCandidate(entry.candidate, entry.callback, entry.callback)
+        this.addIceCandidate(entry.candidate, entry.callback, entry.callback);
       }
     }
   });
@@ -69,53 +72,52 @@ function bufferizeCandidates(pc, onerror) {
       case 'stable':
         if (pc.remoteDescription) {
           pc.addIceCandidate(candidate, callback, callback);
-          break
+          break;
         }
       // TODO: fallthrough or not?
       default:
         candidatesQueue.push({
-          candidate: candidate,
-          callback: callback
-        })
+          candidate,
+          callback,
+        });
     }
-  }
+  };
 }
 
 /* Simulcast utilities */
 
 function removeFIDFromOffer(sdp) {
-  let n = sdp.indexOf("a=ssrc-group:FID");
+  const n = sdp.indexOf('a=ssrc-group:FID');
 
   if (n > 0) {
     return sdp.slice(0, n);
-  } else {
-    return sdp;
   }
+  return sdp;
 }
 
 function getSimulcastInfo(videoStream) {
-  let videoTracks = videoStream.getVideoTracks();
+  const videoTracks = videoStream.getVideoTracks();
 
   if (!videoTracks.length) {
     logger.warn('No video tracks available in the video stream');
-    return ''
+    return '';
   }
 
-  let lines = [
+  const lines = [
     'a=x-google-flag:conference',
     'a=ssrc-group:SIM 1 2 3',
     'a=ssrc:1 cname:localVideo',
-    'a=ssrc:1 msid:' + videoStream.id + ' ' + videoTracks[0].id,
-    'a=ssrc:1 mslabel:' + videoStream.id,
-    'a=ssrc:1 label:' + videoTracks[0].id,
+    `a=ssrc:1 msid:${videoStream.id} ${videoTracks[0].id}`,
+    `a=ssrc:1 mslabel:${videoStream.id}`,
+    `a=ssrc:1 label:${videoTracks[0].id}`,
     'a=ssrc:2 cname:localVideo',
-    'a=ssrc:2 msid:' + videoStream.id + ' ' + videoTracks[0].id,
-    'a=ssrc:2 mslabel:' + videoStream.id,
-    'a=ssrc:2 label:' + videoTracks[0].id,
+    `a=ssrc:2 msid:${videoStream.id} ${videoTracks[0].id}`,
+    `a=ssrc:2 mslabel:${videoStream.id}`,
+    `a=ssrc:2 label:${videoTracks[0].id}`,
     'a=ssrc:3 cname:localVideo',
-    'a=ssrc:3 msid:' + videoStream.id + ' ' + videoTracks[0].id,
-    'a=ssrc:3 mslabel:' + videoStream.id,
-    'a=ssrc:3 label:' + videoTracks[0].id
+    `a=ssrc:3 msid:${videoStream.id} ${videoTracks[0].id}`,
+    `a=ssrc:3 mslabel:${videoStream.id}`,
+    `a=ssrc:3 label:${videoTracks[0].id}`,
   ];
 
   lines.push('');
@@ -139,7 +141,7 @@ class WebRTCPeer extends EventEmitter {
   _useDataChannels: boolean;
 
 
-  constructor(mode: string, options = {}, callback) {
+  constructor(mode: string, options = {}) {
     super();
 
     this._localVideo = options._localVideo;
@@ -160,13 +162,14 @@ class WebRTCPeer extends EventEmitter {
     this._id = options.id;
     this._guid = uuid.v4();
 
-    this._configuration = recursive(
-      {iceServers: freeice()},
-      options._configuration || {});
+    this._configuration = merge.recursive(
+        { iceServers: freeice() },
+        options._configuration || {},
+      );
 
     {
-      let onicecandidate = options.onicecandidate;
-      let oncandidategatheringdone = options.oncandidategatheringdone;
+      const onicecandidate = options.onicecandidate;
+      const oncandidategatheringdone = options.oncandidategatheringdone;
 
       if (onicecandidate) this.on('icecandidate', onicecandidate);
       if (oncandidategatheringdone) this.on('_candidategatheringdone', oncandidategatheringdone);
@@ -181,8 +184,8 @@ class WebRTCPeer extends EventEmitter {
       this._peerConnection = new RTCPeerConnection(this.configuration);
 
       if (this._useDataChannels && !this._dataChannel) {
-        let dcId = 'WebRtcPeer-' + self.id;
-        let dcOptions = undefined;
+        let dcId = `WebRtcPeer-${self.id}`;
+        let dcOptions;
 
         if (this._dataChannelConfig) {
           dcId = this._dataChannelConfig.id || dcId;
@@ -202,7 +205,7 @@ class WebRTCPeer extends EventEmitter {
     }
 
     this._peerConnection.addEventListener('icecandidate', (event) => {
-      let candidate = event.candidate;
+      const candidate = event.candidate;
 
       if (
         EventEmitter.listenerCount(this, 'icecandidate') ||
@@ -217,7 +220,6 @@ class WebRTCPeer extends EventEmitter {
 
           this._candidategatheringdone = true;
         }
-
       } else if (!this._candidategatheringdone) {
         // Not listening to 'icecandidate' or 'candidategatheringdone' events, queue
         // the candidate until one of them is listened
@@ -233,20 +235,20 @@ class WebRTCPeer extends EventEmitter {
     this.on('newListener', (event, listener) => {
       if (event === 'icecandidate' || event === 'candidategatheringdone') {
         while (candidatesQueueOut.length) {
-          let candidate = candidatesQueueOut.shift();
+          const candidate = candidatesQueueOut.shift();
 
           if (!candidate === (event === 'candidategatheringdone')) {
-            listener(candidate)
+            listener(candidate);
           }
         }
       }
     });
 
-    let addIceCandidate = bufferizeCandidates(this._peerConnection);
+    const addIceCandidate = bufferizeCandidates(this._peerConnection);
   }
 
   get peerConnection() {
-    return this._peerConnection
+    return this._peerConnection;
   }
 
   get id() {
@@ -274,14 +276,14 @@ class WebRTCPeer extends EventEmitter {
       throw new Error('No video stream data available');
     }
 
-    let canvas = document.createElement('canvas');
+    const canvas = document.createElement('canvas');
 
     canvas.width = this._remoteVideo.videoWidth;
     canvas.height = this._remoteVideo.videoHeight;
 
     canvas.getContext('2d').drawImage(this._remoteVideo, 0, 0);
 
-    return canvas
+    return canvas;
   }
 
   /**
@@ -294,7 +296,7 @@ class WebRTCPeer extends EventEmitter {
    * @param callback - Called when the ICE candidate has been added.
    */
   addIceCandidate(iceCandidate, callback) {
-    let candidate = new RTCIceCandidate(iceCandidate);
+    const candidate = new RTCIceCandidate(iceCandidate);
 
     logger.debug('Remote ICE candidate received', iceCandidate);
     callback = (callback || noop).bind(this);
@@ -316,9 +318,9 @@ class WebRTCPeer extends EventEmitter {
     }
 
 
-    let constraints = this._connectionConstraints;
+    const constraints = this._connectionConstraints;
 
-    logger.info('constraints: ' + JSON.stringify(constraints));
+    logger.info(`constraints: ${JSON.stringify(constraints)}`);
 
     this._peerConnection.createOffer(constraints)
       .then((offer) => {
@@ -326,11 +328,11 @@ class WebRTCPeer extends EventEmitter {
         offer = this.mangleSdpToAddSimulcast(offer);
         return this._peerConnection.setLocalDescription(offer);
       }).then(() => {
-        let localDescription = this._peerConnection.localDescription;
+        const localDescription = this._peerConnection.localDescription;
         logger.info('Local description set', localDescription.sdp);
 
-        callback(null, this.localDescription.sdp, this.processAnswer.bind(self))
-      }).catch(callback)
+        callback(null, this.localDescription.sdp, this.processAnswer.bind(self));
+      }).catch(callback);
   }
 
   getLocalSessionDescriptor() {
@@ -343,14 +345,14 @@ class WebRTCPeer extends EventEmitter {
 
   setRemoteVideo() {
     if (this._remoteVideo) {
-      let stream = this._peerConnection.getRemoteStreams()[0];
-      let url = stream ? URL.createObjectURL(stream) : '';
+      const stream = this._peerConnection.getRemoteStreams()[0];
+      const url = stream ? URL.createObjectURL(stream) : '';
 
       this._remoteVideo.pause();
       this._remoteVideo.src = url;
       this._remoteVideo.load();
 
-      logger.info('Remote URL:', url)
+      logger.info('Remote URL:', url);
     }
   }
 
@@ -361,9 +363,9 @@ class WebRTCPeer extends EventEmitter {
 
   send(data) {
     if (this._dataChannel && this._dataChannel.readyState === 'open') {
-      this._dataChannel.send(data)
+      this._dataChannel.send(data);
     } else {
-      logger.warn('Trying to send data over a non-existing or closed data channel')
+      logger.warn('Trying to send data over a non-existing or closed data channel');
     }
   }
 
@@ -380,23 +382,23 @@ class WebRTCPeer extends EventEmitter {
   processAnswer(sdpAnswer, callback) {
     callback = (callback || noop).bind(this);
 
-    let answer = new RTCSessionDescription({
+    const answer = new RTCSessionDescription({
       type: 'answer',
-      sdp: sdpAnswer
+      sdp: sdpAnswer,
     });
 
     logger.info('SDP answer received, setting remote description');
 
     if (this._peerConnection.signalingState === 'closed') {
-      return callback('PeerConnection is closed')
+      return callback('PeerConnection is closed');
     }
 
-    this._peerConnection.setRemoteDescription(answer, function () {
-        setRemoteVideo();
+    this._peerConnection.setRemoteDescription(answer, () => {
+      setRemoteVideo();
 
-        callback()
-      },
-      callback)
+      callback();
+    },
+      callback);
   }
 
   /**
@@ -409,34 +411,32 @@ class WebRTCPeer extends EventEmitter {
    * @param callback - Called when the remote description has been set
    *  successfully.
    */
-  processOffer (sdpOffer, callback) {
+  processOffer(sdpOffer, callback) {
     callback = callback.bind(this);
 
-    let offer = new RTCSessionDescription({
+    const offer = new RTCSessionDescription({
       type: 'offer',
-      sdp: sdpOffer
+      sdp: sdpOffer,
     });
 
     logger.info('SDP offer received, setting remote description');
 
     if (this._peerConnection.signalingState === 'closed') {
-      return callback('PeerConnection is closed')
+      return callback('PeerConnection is closed');
     }
 
     this._peerConnection.setRemoteDescription(offer)
-      .then(() => {
-        return setRemoteVideo()
-      }).then(() => {
-        return pc.createAnswer()
-      }).then((answer) => {
+      .then(() => this.setRemoteVideo())
+      .then(() => this._peerConnection.createAnswer())
+      .then((answer) => {
         answer = this.mangleSdpToAddSimulcast(answer);
         logger.info('Created SDP answer');
         return this._peerConnection.setLocalDescription(answer);
       }).then(() => {
-        let localDescription = this._peerConnection.localDescription;
+        const localDescription = this._peerConnection.localDescription;
         logger.info('Local description set', localDescription.sdp);
-        callback(null, localDescription.sdp)
-      }).catch(callback)
+        callback(null, localDescription.sdp);
+      }).catch(callback);
   }
 
   mangleSdpToAddSimulcast(answer) {
@@ -444,15 +444,45 @@ class WebRTCPeer extends EventEmitter {
       if (browser.name === 'Chrome' || browser.name === 'Chromium') {
         logger.info('Adding multicast info');
         answer = new RTCSessionDescription({
-          'type': answer.type,
-          'sdp': removeFIDFromOffer(answer.sdp) + getSimulcastInfo(this._videoStream)
-        })
+          type: answer.type,
+          sdp: removeFIDFromOffer(answer.sdp) + getSimulcastInfo(this._videoStream),
+        });
       } else {
-        logger.warn('Simulcast is only available in Chrome browser.')
+        logger.warn('Simulcast is only available in Chrome browser.');
       }
     }
 
-    return answer
+    return answer;
+  }
+
+  /**
+   * This function creates the RTCPeerConnection object taking into account the
+   * properties received in the constructor. It starts the SDP negotiation
+   * process: generates the SDP offer and invokes the onsdpoffer callback. This
+   * callback is expected to send the SDP offer, in order to obtain an SDP
+   * answer from another peer.
+   */
+  start(callback) {
+    if (this._peerConnection.signalingState === 'closed') {
+      callback(
+        'The peer connection object is in "closed" state. This is most likely due to an invocation of the dispose method before accepting in the dialogue',
+      );
+    }
+
+    if (this._videoStream && this._localVideo) {
+      this.showLocalVideo();
+    }
+
+    if (this._videoStream) {
+      this._peerConnection.addStream(videoStream);
+    }
+
+    if (this._audioStream) {
+      this._peerConnection.addStream(audioStream);
+    }
+
+    // TODO: return promise
+    // callback()
   }
 }
 
